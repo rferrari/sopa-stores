@@ -1,0 +1,68 @@
+# Render Blueprint for the sopa-store monorepo (turborepo, npm workspaces).
+# Backend lives at apps/backend and builds into apps/backend/.medusa/server.
+# Root Directory is the repo root so npm workspaces resolve correctly.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Medusa server: HTTP API + Admin dashboard
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: sopa-store-server
+    runtime: node
+    plan: starter
+    region: frankfurt                 # match your Supabase region
+    branch: main
+    buildCommand: npm ci && npm run build && cd apps/backend/.medusa/server && npm install
+    preDeployCommand: cd apps/backend/.medusa/server && npx medusa db:migrate
+    startCommand: cd apps/backend/.medusa/server && npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: MEDUSA_WORKER_MODE
+        value: server
+      - key: DISABLE_MEDUSA_ADMIN
+        value: "false"
+      - key: PORT
+        value: "9000"
+      - key: DATABASE_URL             # Supabase connection string (set in UI)
+        sync: false
+      - key: REDIS_URL                # optional for a test (set in UI when ready)
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: STORE_CORS               # leave empty until you have a storefront
+        sync: false
+      - key: ADMIN_CORS               # e.g. https://sopa-store-server.onrender.com
+        sync: false
+      - key: AUTH_CORS                # same as ADMIN_CORS (+ storefront URL later)
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # Medusa worker: scheduled jobs, subscribers, background tasks
+  # ---------------------------------------------------------------------------
+  - type: worker
+    name: sopa-store-worker
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: main
+    buildCommand: npm ci && npm run build && cd apps/backend/.medusa/server && npm install
+    startCommand: cd apps/backend/.medusa/server && npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: MEDUSA_WORKER_MODE
+        value: worker
+      - key: DISABLE_MEDUSA_ADMIN
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false                   # set to the SAME value as the server
+      - key: COOKIE_SECRET
+        sync: false                   # set to the SAME value as the server
