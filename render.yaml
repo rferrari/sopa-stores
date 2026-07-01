@@ -14,7 +14,10 @@ services:
     branch: main
     # The .medusa/server output has no .npmrc, so its install uses strict peer
     # resolution and fails on @medusajs/ui — force legacy-peer-deps here.
-    buildCommand: npm ci && npm run build && cd apps/backend/.medusa/server && npm install --legacy-peer-deps
+    # Build ONLY the backend — the storefront is deployed on Vercel.
+    # Plain `npm run build` runs `turbo build` across all workspaces and would
+    # try (and fail) to build the storefront here.
+    buildCommand: npm ci && npx turbo run build --filter=@dtc/backend && cd apps/backend/.medusa/server && npm install --legacy-peer-deps
     # Free tier has no pre-deploy command, so run migrations at start.
     # Migrations are idempotent — already-applied ones are skipped.
     startCommand: cd apps/backend/.medusa/server && npx medusa db:migrate && npm run start
