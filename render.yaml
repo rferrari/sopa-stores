@@ -15,8 +15,9 @@ services:
     # The .medusa/server output has no .npmrc, so its install uses strict peer
     # resolution and fails on @medusajs/ui — force legacy-peer-deps here.
     buildCommand: npm ci && npm run build && cd apps/backend/.medusa/server && npm install --legacy-peer-deps
-    preDeployCommand: cd apps/backend/.medusa/server && npx medusa db:migrate
-    startCommand: cd apps/backend/.medusa/server && npm run start
+    # Free tier has no pre-deploy command, so run migrations at start.
+    # Migrations are idempotent — already-applied ones are skipped.
+    startCommand: cd apps/backend/.medusa/server && npx medusa db:migrate && npm run start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
