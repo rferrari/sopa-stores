@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --prefix=../.. --workspace=medusa-next --include-workspace-root",
+  "installCommand": "npm install --workspaces=false",
   "buildCommand": "next build"
 }
