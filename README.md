@@ -1,158 +1,191 @@
-<p align="center">
-  <a href="https://www.medusajs.com">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/59018053/229103275-b5e482bb-4601-46e6-8142-244f531cebdb.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    <img alt="Medusa logo" src="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-    </picture>
-  </a>
-</p>
-<h1 align="center">
-  Medusa DTC Starter
-</h1>
+# SOPA Store
 
-<h4 align="center">
-  <a href="https://docs.medusajs.com">Documentation</a> |
-  <a href="https://www.medusajs.com">Website</a>
-</h4>
+A [Medusa v2](https://medusajs.com) commerce platform in a Turborepo monorepo:
 
-<p align="center">
-  Building blocks for digital commerce
-</p>
-<p align="center">
-  <a href="https://github.com/medusajs/medusa/blob/develop/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="Medusa is released under the MIT license." />
-  </a>
-  <a href="https://circleci.com/gh/medusajs/medusa">
-    <img src="https://circleci.com/gh/medusajs/medusa.svg?style=shield" alt="Current CircleCI build status." />
-  </a>
-  <a href="https://github.com/medusajs/medusa/blob/develop/CONTRIBUTING.md">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs welcome!" />
-  </a>
-    <a href="https://www.producthunt.com/posts/medusa"><img src="https://img.shields.io/badge/Product%20Hunt-%231%20Product%20of%20the%20Day-%23DA552E" alt="Product Hunt"></a>
-  <a href="https://discord.gg/xpCwq3Kfn8">
-    <img src="https://img.shields.io/badge/chat-on%20discord-7289DA.svg" alt="Discord Chat" />
-  </a>
-  <a href="https://twitter.com/intent/follow?screen_name=medusajs">
-    <img src="https://img.shields.io/twitter/follow/medusajs.svg?label=Follow%20@medusajs" alt="Follow @medusajs" />
-  </a>
-</p>
+- **`apps/backend`** — Medusa server + Admin dashboard (`@dtc/backend`)
+- **`apps/storefront`** — Next.js 15 storefront (`medusa-next`, React 19)
 
-# Medusa DTC Starter
+## Architecture
 
-A production-ready monorepo starter for direct-to-consumer ecommerce stores powered by Medusa and Next.js. Includes a fully featured storefront with product browsing, cart, checkout, customer accounts, and order management.
-
-## Features
-
-- All of [Medusa's commerce features](https://docs.medusajs.com/resources/commerce-modules)
-- Multi-region support with automatic country detection
-- Product catalog with variant selection
-- Cart with promotion codes
-- Multi-step checkout with shipping and payment
-- Customer accounts with order history and address management
-- Order transfer between accounts
-
-## Getting Started
-
-### Deploy with Medusa Cloud
-
-The fastest way to get started is deploying with [Medusa Cloud](https://cloud.medusajs.com):
-
-1. [Create a Medusa Cloud account](https://cloud.medusajs.com)
-2. Deploy this starter directly from your dashboard
-
-### Local Installation
-
-> **Prerequisites:
->
-> - [Node.js](https://nodejs.org/) v20+
-> - [PostgreSQL](https://www.postgresql.org/) v15+
-> - [pnpm](https://pnpm.io/) v10+
-
-1. Clone the repository and install dependencies:
-
-```bash
-git clone https://github.com/medusajs/dtc-starter.git
-cd dtc-starter
-pnpm install
+```
+        ┌──────────────────────────────┐
+        │  Backend + Admin  (Render)    │  https://sopa-stores.onrender.com
+        │  apps/backend                 │  admin at /app
+        └──────────────────────────────┘
+                 │                     │
+        ┌────────────────┐    ┌─────────────────────┐
+        │ Postgres        │    │ Storefront (Vercel) │  https://sopa-stores-frontend.vercel.app
+        │ (Supabase)      │    │ apps/storefront     │  lands at /de
+        └────────────────┘    └─────────────────────┘
 ```
 
-2. Set up environment variables for the backend:
+| Piece | Hosted on | Notes |
+|---|---|---|
+| Backend API + Admin | Render (web service) | Long-running Node process, `shared` worker mode |
+| Storefront | Vercel | Next.js, isolated install (see below) |
+| Database | Supabase | Postgres — **must use the Session Pooler** |
+
+---
+
+## Local development
+
+Prerequisites: Node 20, npm 10, a Postgres connection (Supabase or local).
 
 ```bash
-cp apps/backend/.env.template apps/backend/.env
+# from repo root
+npm install
+
+# backend (http://localhost:9000, admin at /app)
+npm run backend:dev
+
+# storefront (http://localhost:8000)
+npm run storefront:dev
 ```
 
-3. Set the database URL in `apps/backend.env`:
+Environment files (not committed):
+- `apps/backend/.env` — see [Backend env vars](#backend-env-vars)
+- `apps/storefront/.env` — see [Storefront env vars](#storefront-env-vars)
 
-```bash
-# Replace with actual database URL, make sure the database exists.
-DATABASE_URL=postgres://postgres:@localhost:5432/medusa-dtc-starter
-```
-
-4. Run migrations:
+Create an admin user (setup with `--db-url` skips this):
 
 ```bash
 cd apps/backend
-pnpm medusa db:migrate
+npx medusa user -e admin@sopa.store -p 'YourStrongPassword'
 ```
 
-5. Add admin user:
+---
 
-```bash
-cd apps/backend
-pnpm medusa user -e admin@test.com -p supersecret
+## Deployment
+
+> This section exists because deploying was painful. Follow it exactly and it works.
+
+### Database — Supabase (do this first)
+
+1. Create a Supabase project.
+2. **Use the Session Pooler connection string, NOT the direct connection.**
+   - Supabase → **Connect** → **Session pooler** (port `5432`).
+   - The direct host (`db.<ref>.supabase.co`) is **IPv6-only** on the free plan and Render **cannot reach it** (`ENETUNREACH`). IPv4 for the direct host is a paid add-on — don't bother; the pooler is free and IPv4.
+3. Append **`?sslmode=no-verify`** to the URL.
+   - `sslmode=require` now aliases to `verify-full`, which rejects Supabase's self-signed cert (`SELF_SIGNED_CERT_IN_CHAIN`). `no-verify` = encrypted but unverified, which is what the pooler needs.
+   - **Not** the Transaction pooler (port `6543`) — it breaks Medusa migrations (no prepared statements).
+
+Final `DATABASE_URL`:
+```
+postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-0-<REGION>.pooler.supabase.com:5432/postgres?sslmode=no-verify
+```
+URL-encode special characters in the password (`@`→`%40`, `#`→`%23`, …).
+
+### Backend — Render
+
+Deploy from `render.yaml` (Blueprint) or configure a web service manually.
+
+- **Root Directory:** `.` (repo root — needed so npm workspaces resolve)
+- **Build command:**
+  ```
+  npm ci && npx turbo run build --filter=@dtc/backend && cd apps/backend/.medusa/server && npm install --legacy-peer-deps
+  ```
+  - `--filter=@dtc/backend` builds **only** the backend. Plain `turbo build` also builds the storefront and fails on missing `NEXT_PUBLIC_*` vars.
+  - `--legacy-peer-deps` on the `.medusa/server` install — that folder has no `.npmrc`, so it hits a peer-dep conflict (`@medusajs/ui`) without it.
+- **Start command** (free tier has no pre-deploy hook, so migrations run here — use `&&`, not `&`):
+  ```
+  cd apps/backend/.medusa/server && npx medusa db:migrate && npm run start
+  ```
+- **Health check path:** `/health`
+- Set the [Backend env vars](#backend-env-vars) in the dashboard.
+
+⚠️ **Free tier spins down after ~15 min idle** → cold starts of 30–50s. Fine for testing; upgrade before real traffic (cold starts also break storefront build-time fetches).
+
+### Storefront — Vercel
+
+- **Root Directory:** `apps/storefront`
+- **Install command** (in `apps/storefront/vercel.json`):
+  ```
+  npm install --workspaces=false
+  ```
+  - The backend pins **React 18**, the storefront needs **React 19**. A shared workspace hoist puts `next` at the root but nests `react`, breaking `next build` ("module react not found"). `--workspaces=false` makes the storefront install self-contained.
+  - If the dashboard has an **Install Command override**, clear it so `vercel.json` wins.
+- Set the [Storefront env vars](#storefront-env-vars).
+- The store is country-scoped — it lands at `/<region-country>` (e.g. `/de`), matching a country in a **region** that exists in the backend.
+
+### CORS (on the backend / Render)
+
+Values must be **`scheme://host` only** — no trailing slash, no path. Otherwise browser requests are blocked.
+
+```
+STORE_CORS = https://sopa-stores-frontend.vercel.app
+ADMIN_CORS = https://sopa-stores.onrender.com
+AUTH_CORS  = https://sopa-stores-frontend.vercel.app,https://sopa-stores.onrender.com
 ```
 
-6. Start Medusa backend:
+`ADMIN_CORS` points to the **backend** (the admin is served there), `STORE_CORS` to the storefront.
 
-```bash
-cd apps/backend
-pnpm dev
+### Publishable key
+
+The storefront needs a publishable key linked to a sales channel. Find it in Admin → **Settings → Publishable API Keys**, or via SQL:
+```sql
+select title, token from api_key where type = 'publishable';
 ```
+Set the `pk_...` value as `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` **on Vercel** (not Render).
 
-7. Open the admin dashboard at `localhost:9000/app` and log in. Retrieve your publishable API key at Settings > Publishable API key.
+---
 
-8. Set up environment variables for the storefront:
+## Updating Medusa
 
-```bash
-cp apps/storefront/.env.template apps/storefront/.env.local
-```
+Medusa core packages are **released together and must share the same version.**
 
-9. Update `apps/storefront/.env.local` with your Medusa publishable API key:
+1. Read the [release notes](https://github.com/medusajs/medusa/releases) for breaking changes / codemods.
+2. Work on a **branch**, and back up / snapshot the Supabase DB before schema-changing upgrades.
+3. Bump **all** backend `@medusajs/*` packages to the same new version; bump `@medusajs/ui`/`ui-preset`/`icons` to the compatible versions the release names.
+4. `npm install` (regenerates the lockfile).
+5. `npx medusa db:migrate` (new versions often add migrations — run against a test DB first if there are schema changes).
+6. Smoke-test locally (`npm run backend:dev`, `npm run storefront:dev`), then merge → deploy.
 
-```bash
-NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY=pk_6c3...
-```
+Go incrementally across versions; don't jump many minor versions at once. There is no single "upgrade" command — it's a coordinated bump + migrate.
 
-10.  Start storefront:
+> Storefront `@medusajs/*` deps are currently `latest` (non-reproducible). Pin them to exact versions to avoid surprise breakage.
 
-```bash
-cd apps/storefront
-pnpm dev
-```
+---
 
-The storefront runs on `http://localhost:8000`.
+## Environment variables
 
-You can slo run the following command from the root to start both backend and storefront:
+### Backend env vars
+| Key | Example / notes |
+|---|---|
+| `DATABASE_URL` | Supabase **session pooler** string + `?sslmode=no-verify` |
+| `MEDUSA_WORKER_MODE` | `shared` (single service) |
+| `DISABLE_MEDUSA_ADMIN` | `false` |
+| `PORT` | `9000` (HTTP port — not the DB port) |
+| `JWT_SECRET` / `COOKIE_SECRET` | random secrets (same on all backend services) |
+| `STORE_CORS` / `ADMIN_CORS` / `AUTH_CORS` | see [CORS](#cors-on-the-backend--render) |
+| `REDIS_URL` | optional for a test; add Upstash for production |
 
-```bash
-pnpm dev
-```
+### Storefront env vars
+| Key | Example / notes |
+|---|---|
+| `MEDUSA_BACKEND_URL` | `https://sopa-stores.onrender.com` (server-side, no `NEXT_PUBLIC_`) |
+| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | `pk_...` from admin |
+| `NEXT_PUBLIC_BASE_URL` | the storefront's own URL |
+| `NEXT_PUBLIC_DEFAULT_REGION` | ISO-2 country code in an existing region (e.g. `de`) |
 
-## Configuration
+---
 
-The storefront is configured via environment variables in `apps/storefront/.env.local`:
+## Troubleshooting
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` | Publishable API key from your Medusa backend | — |
-| `NEXT_PUBLIC_MEDUSA_BACKEND_URL` | URL of your Medusa backend | `http://localhost:9000` |
-| `NEXT_PUBLIC_DEFAULT_REGION` | Default region country code | `dk` |
-| `NEXT_PUBLIC_BASE_URL` | Base URL of the storefront | `https://localhost:8000` |
-| `NEXT_PUBLIC_STRIPE_KEY` | Stripe publishable key (optional) | — |
+| Symptom | Cause / fix |
+|---|---|
+| `ENETUNREACH …:5432` (IPv6 addr) | Using Supabase direct host. Switch to **session pooler** (IPv4). |
+| `SELF_SIGNED_CERT_IN_CHAIN` | Use `?sslmode=no-verify` in `DATABASE_URL`. |
+| `ECONNREFUSED ::1:5432` | `DATABASE_URL` empty/unset → app falls back to localhost. |
+| `npm ci` "lock file not in sync" | Regenerate `package-lock.json` (`npm install`), commit, push. |
+| Render build fails on `medusa-next` / missing `NEXT_PUBLIC_*` | Build must be scoped: `turbo run build --filter=@dtc/backend`. |
+| Vercel: "module react not found" | Storefront install must be `npm install --workspaces=false`. |
+| Storefront build: "valid publishable key required" | Set `NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY` on Vercel. |
+| Storefront build fails collecting `/[countryCode]` pages | `NEXT_PUBLIC_DEFAULT_REGION` doesn't match a region; or backend unreachable/asleep. |
+| CORS errors in browser (cart/checkout) | CORS values have trailing slash/path — use `scheme://host` only. |
+| `/app` 404s → redirects to `/de/app` | You're on the storefront domain. Admin is on the **backend** domain (`…onrender.com/app`). |
 
-## Resources
+---
 
-- [Medusa Documentation](https://docs.medusajs.com)
-- [Medusa Cloud](https://cloud.medusajs.com)
+## Multi-storefront roadmap
+
+See [`docs/multi-storefront-plan.md`](docs/multi-storefront-plan.md) — plan for serving multiple client storefronts from one backend via Sales Channels (pending validation).
